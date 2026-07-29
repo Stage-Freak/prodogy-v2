@@ -109,6 +109,10 @@ runs:
     - name: Debug enrich status
       shell: bash
       if: inputs.enrich == 'true'
+      env:
+        PRODOGY_LLM_API_KEY: ${{ inputs.llm-api-key }}
+        PRODOGY_LLM_PROVIDER_URL: ${{ inputs.llm-provider-url }}
+        PRODOGY_LLM_MODEL: ${{ inputs.llm-model }}
       run: |
         python3 << 'PYEOF'
         import json, os
