@@ -110,34 +110,27 @@ runs:
       shell: bash
       if: inputs.enrich == 'true'
       run: |
-        python3 -c "
-import json
-try:
-    r = json.load(open('/tmp/prodogy-report.json'))
-    findings = [f for f in r.get('findings', []) if not f.get('suppressed')]
-    enriched = [f for f in findings if f.get('llm_explanation')]
-    print(f'Total active findings: {len(findings)}')
-    print(f'Enriched findings: {len(enriched)}')
-    if enriched:
-        for f in enriched:
-            print(f'  {f[\"rule_id\"]}: llm_explanation present ({len(f[\"llm_explanation\"])} chars)')
-    elif findings:
-        # Check env vars
-        import os
-        key = os.environ.get('PRODOGY_LLM_API_KEY', '')
-        url = os.environ.get('PRODOGY_LLM_PROVIDER_URL', '')
-        model = os.environ.get('PRODOGY_LLM_MODEL', '')
-        print(f'KEY set: {bool(key)}, URL: {url}, Model: {model}')
-        if not key:
-            print('WARNING: PRODOGY_LLM_API_KEY is empty!')
-        # First finding details
-        f = findings[0]
-        print(f'Sample finding keys: {list(f.keys())}')
-        print(f'Has llm_explanation key: {\"llm_explanation\" in f}')
-except Exception as e:
-    print(f'Debug error: {e}')
-"
-
+        python3 << 'PYEOF'
+        import json, os
+        try:
+            r = json.load(open('/tmp/prodogy-report.json'))
+            findings = [f for f in r.get('findings', []) if not f.get('suppressed')]
+            enriched = [f for f in findings if f.get('llm_explanation')]
+            print('Total active findings:', len(findings))
+            print('Enriched findings:', len(enriched))
+            if not enriched and findings:
+                key = os.environ.get('PRODOGY_LLM_API_KEY', '')
+                url = os.environ.get('PRODOGY_LLM_PROVIDER_URL', '')
+                model = os.environ.get('PRODOGY_LLM_MODEL', '')
+                print('KEY set:', bool(key), 'URL:', url, 'Model:', model)
+                if not key:
+                    print('WARNING: PRODOGY_LLM_API_KEY is empty!')
+                f = findings[0]
+                print('Sample finding keys:', list(f.keys()))
+                print('Has llm_explanation:', 'llm_explanation' in f)
+        except Exception as e:
+            print('Debug error:', e)
+        PYEOF
     - name: Post PR comment
       if: github.event_name == 'pull_request' && inputs.post-pr-comment == 'true' && inputs.github-token != ''
       uses: actions/github-script@v7
