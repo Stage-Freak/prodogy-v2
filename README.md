@@ -34,6 +34,27 @@ pip install -e ".[dev,web]"
 
 ## Usage
 
+### GitHub Action (recommended)
+
+Add one step to any workflow — no copy-paste needed:
+
+```yaml
+- uses: your-org/prodogy@v0.2.0
+  with:
+    fail-on: error           # gate threshold
+    changed: changed.txt     # only scan PR-changed files
+    config: .prodogy.yml     # optional config file
+    version: v0.2.0          # pin a version (default: latest from PyPI)
+```
+
+The action installs Prodogy with all extras, collects changed files in PR mode,
+runs the scan, and exits non-zero when findings exceed the `--fail-on` threshold.
+
+For a full demo including SARIF upload and PR comments, see
+[`examples/ci/github-actions.yml`](examples/ci/github-actions.yml).
+
+### CLI
+
 ```bash
 prodogy scan ./path                       # human-friendly terminal report
 prodogy scan ./path --fail-on critical    # gate: exit non-zero on critical+
@@ -52,7 +73,7 @@ prodogy serve                             # launch the local web dashboard (auth
 
 Exit code is `1` when a finding at or above `--fail-on` (default `error`) exists — this is the pipeline gate.
 
-## Rules (v0.2 — 42 rules)
+## Rules (v0.2 — 58 rules)
 
 Run `prodogy rules` for the live, authoritative list. Many rules carry compliance mappings
 (CIS Docker/Kubernetes, NSA/CISA, PCI DSS, SOC 2) surfaced in the compliance report.
