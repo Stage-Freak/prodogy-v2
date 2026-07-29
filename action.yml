@@ -14,14 +14,6 @@ inputs:
     description: 'File containing changed paths (one per line) — scans only those files.'
     required: false
     default: ''
-  format:
-    description: 'Output format (terminal, json, markdown, sarif, compliance).'
-    required: false
-    default: 'terminal'
-  output:
-    description: 'Path to write the report file.'
-    required: false
-    default: ''
   config:
     description: 'Path to a .prodogy.yml config file.'
     required: false
@@ -31,17 +23,17 @@ inputs:
     required: false
     default: ''
   version:
-    description: 'Prodogy version (e.g. v0.2.0). Defaults to latest from PyPI.'
+    description: 'Prodogy version (e.g. v0.2.0). Defaults to latest from source.'
     required: false
     default: ''
-
-outputs:
-  exit_code:
-    description: 'Exit code from the scan (0 = pass, 1 = fail).'
-    value: ${{ steps.scan.outputs.exit_code }}
-  report_path:
-    description: 'Path to the generated report file.'
-    value: ${{ steps.scan.outputs.report_path }}
+  post-pr-comment:
+    description: 'Post a PR comment with findings summary.'
+    required: false
+    default: 'false'
+  github-token:
+    description: 'GitHub token for posting PR comments (${{ secrets.GITHUB_TOKEN }}).'
+    required: false
+    default: ''
 
 runs:
   using: 'composite'
@@ -73,7 +65,6 @@ runs:
         if [ "${{ github.event_name }}" = "pull_request" ]; then
           git fetch origin "${{ github.base_ref }}" --depth=1 2>/dev/null || true
           git diff --name-only "origin/${{ github.base_ref }}"... > /tmp/prodogy-changed-raw.txt
-          # Prefix with GITHUB_WORKSPACE so --changed gets absolute paths
           rm -f /tmp/prodogy-changed.txt
           while IFS= read -r f; do
             echo "$GITHUB_WORKSPACE/$f" >> /tmp/prodogy-changed.txt
@@ -83,27 +74,67 @@ runs:
         fi
 
     - name: Run Prodogy scan
-      id: scan
       shell: bash
       continue-on-error: true
       run: |
         ARGS=""
-        if [ -f /tmp/prodogy-changed.txt ]; then
-          ARGS="$ARGS --changed /tmp/prodogy-changed.txt"
-        elif [ -n "${{ inputs.changed }}" ]; then
-          ARGS="$ARGS --changed ${{ inputs.changed }}"
-        fi
-        [ -n "${{ inputs.output }}" ] && ARGS="$ARGS -o ${{ inputs.output }} -f ${{ inputs.format }}"
+        [ -f /tmp/prodogy-changed.txt ] && ARGS="$ARGS --changed /tmp/prodogy-changed.txt"
+        [ -n "${{ inputs.changed }}" ] && ARGS="$ARGS --changed ${{ inputs.changed }}"
         [ -n "${{ inputs.config }}" ] && ARGS="$ARGS --config ${{ inputs.config }}"
         [ -n "${{ inputs.baseline }}" ] && ARGS="$ARGS --baseline ${{ inputs.baseline }}"
 
-        prodogy scan . $ARGS --fail-on ${{ inputs.fail-on }}
-        echo "exit_code=$?" >> "$GITHUB_OUTPUT"
-        echo "report_path=${{ inputs.output }}" >> "$GITHUB_OUTPUT"
+        prodogy scan . $ARGS --fail-on ${{ inputs.fail-on }} -f json -o /tmp/prodogy-report.json
+        echo "SCAN_EXIT_CODE=$?" >> "$GITHUB_ENV"
+
+    - name: Post PR comment
+      if: github.event_name == 'pull_request' && inputs.post-pr-comment == 'true' && inputs.github-token != ''
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const fs = require('fs');
+          let report;
+          try { report = JSON.parse(fs.readFileSync('/tmp/prodogy-report.json','utf8')); }
+          catch (e) { console.log('No report'); return; }
+          const findings = (report.findings || []).filter(f => !f.suppressed);
+          if (findings.length === 0) { console.log('Clean'); return; }
+          const sev = { critical:'🛑', error:'❌', warning:'⚠️', info:'ℹ️' };
+          const order = { critical:4, error:3, warning:2, info:1 };
+          const sorted = findings.sort((a,b) => (order[b.severity]||0)-(order[a.severity]||0));
+          const counts = {};
+          for (const f of sorted) counts[f.severity] = (counts[f.severity]||0)+1;
+          let body = '## 🚀 Prodogy — Deployment Readiness Report\n\n';
+          body += `Scanned **${report.summary.scanned_files}** file(s) — `;
+          body += `🛑 ${counts.critical||0} critical, ❌ ${counts.error||0} error, ⚠️ ${counts.warning||0} warning, ℹ️ ${counts.info||0} info.\n\n`;
+          const blocking = sorted.filter(f => order[f.severity] >= 3);
+          body += blocking.length
+            ? `> ⚠️ **${blocking.length} finding(s) at or above 'error'** — gate **FAILS**.\n\n`
+            : '> ✅ No findings at or above `error` — gate **passes**.\n\n';
+          body += '<details><summary>Findings</summary>\n\n| Severity | Rule | File | Issue |\n|---|---|---|---|\n';
+          for (const f of sorted) {
+            const loc = f.location.line ? `${f.location.path}:${f.location.line}` : f.location.path;
+            body += `| ${sev[f.severity]||''} ${f.severity} | \`${f.rule_id}\` | \`${loc}\` | ${f.message.replace(/\|/g,'\\|')} |\n`;
+          }
+          body += '\n</details>\n\n_Powered by [Prodogy](https://github.com/Stage-Freak/prodogy-v2)._';
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number,
+          });
+          const existing = comments.find(c => c.body.includes('Prodogy — Deployment Readiness'));
+          if (existing) {
+            await github.rest.issues.updateComment({ owner: context.repo.owner, repo: context.repo.repo, comment_id: existing.id, body });
+          } else {
+            await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body });
+          }
 
     - name: Gate — fail build on blocking findings
       shell: bash
-      if: steps.scan.outputs.exit_code != '0'
+      if: env.SCAN_EXIT_CODE != '0'
       run: |
         echo "::error::Prodogy gate FAILED — findings at or above '${{ inputs.fail-on }}' threshold."
         exit 1
+
+    - name: Gate passed
+      shell: bash
+      if: env.SCAN_EXIT_CODE == '0'
+      run: |
+        echo "::notice::Prodogy gate PASSED — no blocking findings."
