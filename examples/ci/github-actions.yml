@@ -1,0 +1,41 @@
+name: Prodogy Deployment Readiness
+
+on:
+  pull_request:
+
+jobs:
+  prodogy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      security-events: write   # for SARIF upload
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Prodogy
+        run: pip install -e ".[dev]"
+
+      # PR mode: only scan files changed in this PR for speed on monorepos.
+      - name: Collect changed files
+        run: |
+          git fetch origin "${{ github.base_ref }}" --depth=1
+          git diff --name-only "origin/${{ github.base_ref }}"... > changed.txt
+          cat changed.txt
+
+      - name: Run Prodogy (SARIF for code scanning)
+        run: |
+          prodogy scan . --changed changed.txt -f sarif -o prodogy.sarif --fail-on critical || true
+
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: prodogy.sarif
+
+      # Human-friendly gate: fail the build on critical+ findings.
+      - name: Gate
+        run: prodogy scan . --changed changed.txt --fail-on error

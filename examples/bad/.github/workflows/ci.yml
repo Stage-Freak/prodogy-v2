@@ -1,0 +1,12 @@
+name: CI
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@main
+      - name: Deploy
+        env:
+          DEPLOY_TOKEN: ghp_realtokenABCDEF1234567890abcdef
+        run: ./deploy.sh

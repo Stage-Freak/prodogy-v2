@@ -1,0 +1,9 @@
+# Prodogy configuration for the Prodogy repo itself.
+# Dogfooding: we scan our own deployment configs.
+
+fail_on: error
+
+# The prodogy Dockerfile is an example, not for production use.
+# We scan it for correctness but don't gate on its findings.
+exclude:
+  - "examples/**"

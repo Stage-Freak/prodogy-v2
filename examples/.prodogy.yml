@@ -1,0 +1,23 @@
+# Example Prodogy configuration. Copy to your repo root as .prodogy.yml.
+# All fields are optional; omit any you do not need.
+
+# Turn off rules that do not apply to your context.
+disabled_rules:
+  - K8S004        # missing app labels — if you use a custom label scheme
+
+# Adjust severities to match your team's risk tolerance.
+severity_overrides:
+  DOCKER003: info # HEALTHCHECK handled by Kubernetes probes here
+
+# Skip paths (supports leading **/ recursive globs).
+exclude:
+  - "**/vendor/**"
+  - "**/testdata/**"
+
+# Default gate threshold when --fail-on is not passed.
+fail_on: error
+
+# Categories whose findings can never be silenced by an inline
+# `# prodogy-ok` comment. Defaults to [confidential] so secrets always block.
+non_suppressible:
+  - confidential

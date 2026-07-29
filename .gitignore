@@ -1,0 +1,22 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+*.egg
+.coverage
+htmlcov/
+.prodogy-enrich-cache.json
+prodogy.sarif
+prodogy.json
+
+# Real credentials — never commit.
+.env
+gateway/.env
+gateway/keys.json
+gateway/access.log

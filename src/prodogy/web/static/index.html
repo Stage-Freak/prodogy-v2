@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Prodogy — Deployment Readiness</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">🚀</span>
+      <div>
+        <h1>Prodogy</h1>
+        <p class="tagline">Deployment-readiness coach</p>
+      </div>
+    </div>
+    <form id="scan-form" class="scan-form" autocomplete="off">
+      <input id="path-input" type="text" value="." placeholder="Path to scan (e.g. examples/bad)" />
+      <label class="checkbox">
+        <input id="maint-input" type="checkbox" checked />
+        heatmap
+      </label>
+      <label class="checkbox">
+        <input id="enrich-input" type="checkbox" />
+        enrich
+      </label>
+      <button id="scan-btn" type="submit">Scan</button>
+    </form>
+  </header>
+
+  <main id="main">
+    <section id="empty-state" class="empty">
+      <p>Enter a path and hit <strong>Scan</strong> to analyze your deployment configs.</p>
+    </section>
+
+    <section id="results" class="hidden">
+      <!-- Gate banner -->
+      <div id="gate-banner" class="gate"></div>
+
+      <!-- Summary cards -->
+      <div class="cards" id="summary-cards"></div>
+
+      <!-- Tabs -->
+      <nav class="tabs">
+        <button class="tab active" data-tab="findings">Findings</button>
+        <button class="tab" data-tab="heatmap">Maintainability</button>
+        <button class="tab" data-tab="files">Files</button>
+      </nav>
+
+      <!-- Findings tab -->
+      <div id="tab-findings" class="tab-panel">
+        <div class="filters">
+          <label class="checkbox"><input type="checkbox" class="sev-filter" value="critical" checked /> 🛑 critical</label>
+          <label class="checkbox"><input type="checkbox" class="sev-filter" value="error" checked /> ❌ error</label>
+          <label class="checkbox"><input type="checkbox" class="sev-filter" value="warning" checked /> ⚠️ warning</label>
+          <label class="checkbox"><input type="checkbox" class="sev-filter" value="info" checked /> ℹ️ info</label>
+          <input id="text-filter" type="text" placeholder="filter text…" />
+        </div>
+        <div id="findings-list"></div>
+      </div>
+
+      <!-- Heatmap tab -->
+      <div id="tab-heatmap" class="tab-panel hidden">
+        <p class="hint">Higher heat = more attention needed. Blends churn, tight coupling and neglected debt from git history.</p>
+        <div id="heatmap-list"></div>
+      </div>
+
+      <!-- Files tab -->
+      <div id="tab-files" class="tab-panel hidden">
+        <table class="files-table">
+          <thead><tr><th>File</th><th>Kind</th><th>Status</th></tr></thead>
+          <tbody id="files-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="error-state" class="error hidden"></section>
+  </main>
+
+  <footer class="footer">
+    <span id="footer-version"></span>
+    <span class="muted">Local dashboard — the deterministic engine is the source of truth.</span>
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

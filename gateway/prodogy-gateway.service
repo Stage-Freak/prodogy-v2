@@ -1,0 +1,27 @@
+[Unit]
+Description=Prodogy Gateway — internal LLM proxy for prodogy enrich
+After=network.target
+
+[Service]
+Type=simple
+# Adjust User/WorkingDirectory to wherever this repo is deployed on the EC2
+# instance (see gateway/README.md for the full deploy steps).
+User=prodogy-gateway
+WorkingDirectory=/opt/prodogy-gateway
+ExecStart=/usr/bin/node /opt/prodogy-gateway/server.js
+Restart=on-failure
+RestartSec=5
+
+# Real Veynora credentials + gateway settings live outside the repo,
+# root-readable only. Never commit this file's contents.
+EnvironmentFile=/etc/prodogy-gateway/env
+
+# Modest hardening — this process only needs network egress to Veynora and
+# read/write access to its own keys.json / access.log.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/prodogy-gateway
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,11 @@
+{
+  "_comment": "Copy this file to keys.json (git-ignored) and replace the placeholder keys with real random strings, e.g. `openssl rand -hex 24`. Each entry maps a virtual key -> a label + daily request budget. Delete an entry to revoke that team's access immediately (no restart needed - keys.json is reloaded on every request).",
+  "REPLACE_WITH_RANDOM_HEX_FOR_TEAM_PAYMENTS": {
+    "label": "team-payments",
+    "dailyBudget": 200
+  },
+  "REPLACE_WITH_RANDOM_HEX_FOR_TEAM_PLATFORM": {
+    "label": "team-platform",
+    "dailyBudget": 200
+  }
+}

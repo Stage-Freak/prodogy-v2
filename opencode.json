@@ -1,0 +1,28 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "veynora": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Veynora (Bedrock Gateway)",
+      "options": {
+        "baseURL": "http://localhost:4099/v1",
+        "apiKey": "dummy"
+      },
+      "models": {
+        "Claude Haiku 4.5": {
+          "name": "Claude Haiku 4.5"
+        },
+        "Amazon Nova Pro": {
+          "name": "Amazon Nova Pro"
+        },
+        "Amazon Nova Lite": {
+          "name": "Amazon Nova Lite"
+        },
+        "Amazon Nova Micro": {
+          "name": "Amazon Nova Micro"
+        }
+      }
+    }
+  },
+  "model": "veynora/Claude Haiku 4.5"
+}
