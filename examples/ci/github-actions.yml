@@ -2,40 +2,173 @@ name: Prodogy Deployment Readiness
 
 on:
   pull_request:
+    paths:
+      - '**.yml'
+      - '**.yaml'
+      - '**Dockerfile*'
+      - '**.tf'
+      - '**.env*'
+      - '**docker-compose*'
+      - '**prometheus*'
+      - '**grafana*'
+      - '**playbook*'
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+  security-events: write
 
 jobs:
-  prodogy:
+  prodogy-scan:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
-      security-events: write   # for SARIF upload
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
       - name: Install Prodogy
-        run: pip install -e ".[dev]"
+        run: >
+          pip install
+          https://github.com/your-org/prodogy/releases/download/v0.2.0/prodogy-0.2.0-py3-none-any.whl
 
-      # PR mode: only scan files changed in this PR for speed on monorepos.
-      - name: Collect changed files
+      - name: Collect changed files (PR mode)
         run: |
-          git fetch origin "${{ github.base_ref }}" --depth=1
-          git diff --name-only "origin/${{ github.base_ref }}"... > changed.txt
-          cat changed.txt
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch origin "${{ github.base_ref }}" --depth=1
+            git diff --name-only "origin/${{ github.base_ref }}"... > changed.txt
+            echo "Changed files:"
+            cat changed.txt
+          else
+            echo "." > changed.txt
+          fi
 
-      - name: Run Prodogy (SARIF for code scanning)
+      - name: Run Prodogy scan
+        id: scan
+        continue-on-error: true
         run: |
-          prodogy scan . --changed changed.txt -f sarif -o prodogy.sarif --fail-on critical || true
+          prodogy scan . --changed changed.txt --fail-on error --format json -o prodogy.json
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Report summary
+        run: |
+          if [ -f prodogy.json ]; then
+            critical=$(python3 -c "import json; r=json.load(open('prodogy.json')); print(sum(1 for f in r.get('findings',[]) if not f.get('suppressed') and f.get('severity')=='critical'))")
+            error=$(python3 -c "import json; r=json.load(open('prodogy.json')); print(sum(1 for f in r.get('findings',[]) if not f.get('suppressed') and f.get('severity')=='error'))")
+            warning=$(python3 -c "import json; r=json.load(open('prodogy.json')); print(sum(1 for f in r.get('findings',[]) if not f.get('suppressed') and f.get('severity')=='warning'))")
+            info=$(python3 -c "import json; r=json.load(open('prodogy.json')); print(sum(1 for f in r.get('findings',[]) if not f.get('suppressed') and f.get('severity')=='info'))")
+            echo "::notice::Prodogy: $critical critical, $error error, $warning warning, $info info"
+          fi
+
+      - name: Upload SARIF to GitHub Code Scanning
+        if: always() && hashFiles('prodogy.json') != ''
+        run: |
+          prodogy scan . --changed changed.txt --fail-on error --format sarif -o prodogy.sarif || true
+        continue-on-error: true
 
       - name: Upload SARIF
+        if: always() && hashFiles('prodogy.sarif') != ''
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: prodogy.sarif
+        continue-on-error: true
 
-      # Human-friendly gate: fail the build on critical+ findings.
-      - name: Gate
-        run: prodogy scan . --changed changed.txt --fail-on error
+      - name: Post PR comment
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let report;
+            try {
+              report = JSON.parse(fs.readFileSync('prodogy.json', 'utf8'));
+            } catch (e) {
+              console.log('No scan report');
+              return;
+            }
+
+            const findings = (report.findings || []).filter(f => !f.suppressed);
+            if (findings.length === 0) {
+              console.log('No findings');
+              return;
+            }
+
+            const sevEmoji = { critical: '🛑', error: '❌', warning: '⚠️', info: 'ℹ️' };
+            const sevOrder = { critical: 4, error: 3, warning: 2, info: 1 };
+            const sorted = findings.sort((a, b) => (sevOrder[b.severity] || 0) - (sevOrder[a.severity] || 0));
+
+            const bySev = {};
+            for (const f of sorted) bySev[f.severity] = (bySev[f.severity] || 0) + 1;
+
+            let body = '## 🚀 Prodogy — Deployment Readiness Report\n\n';
+            body += `Scanned **${report.summary.scanned_files}** file(s) — `;
+            body += `🛑 ${bySev.critical || 0} critical, `;
+            body += `❌ ${bySev.error || 0} error, `;
+            body += `⚠️ ${bySev.warning || 0} warning, `;
+            body += `ℹ️ ${bySev.info || 0} info.\n\n`;
+
+            const blocking = sorted.filter(f => sevOrder[f.severity] >= 3);
+            if (blocking.length > 0) {
+              body += `> ⚠️ **${blocking.length} finding(s) at or above 'error'** — gate will **FAIL** the build.\n\n`;
+            } else {
+              body += '> ✅ No findings at or above `error` — gate **passes**.\n\n';
+            }
+
+            body += '<details><summary>View all findings</summary>\n\n';
+            body += '| Severity | Rule | Location | Issue |\n';
+            body += '|---|---|---|---|\n';
+            for (const f of sorted) {
+              const loc = f.location.line ? `${f.location.path}:${f.location.line}` : f.location.path;
+              body += `| ${sevEmoji[f.severity] || ''} ${f.severity} | \`${f.rule_id}\` | \`${loc}\` | ${f.message.replace(/\|/g, '\\|')} |\n`;
+            }
+            body += '\n</details>\n\n';
+
+            body += '<details><summary>Why these matter & how to fix</summary>\n\n';
+            for (const f of sorted) {
+              body += `**${f.rule_id} — ${f.title}** (\`${f.location.path}:${f.location.line || ''}\`)\n`;
+              if (f.rationale) body += `- _Why:_ ${f.rationale}\n`;
+              if (f.remediation) body += `- _Fix:_ ${f.remediation}\n`;
+              body += '\n';
+            }
+            body += '</details>\n\n';
+            body += '_Report generated by [Prodogy](https://github.com/your-org/prodogy) — deployment-readiness linter._';
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body.includes('Prodogy — Deployment Readiness'));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      - name: Gate — fail build on blocking findings
+        if: steps.scan.outputs.exit_code != '0'
+        run: |
+          echo "::error::Prodogy gate FAILED — one or more findings at or above 'error' threshold."
+          exit 1
+
+      - name: Gate passed
+        if: steps.scan.outputs.exit_code == '0'
+        run: |
+          echo "::notice::Prodogy gate PASSED — no blocking findings."

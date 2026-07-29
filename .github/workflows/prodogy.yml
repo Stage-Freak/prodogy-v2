@@ -45,12 +45,21 @@ jobs:
         continue-on-error: true
         run: |
           prodogy scan . --changed changed.txt --fail-on error --format json -o prodogy.json
-          echo "status=$?" >> "$GITHUB_OUTPUT"
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Report summary
+        run: |
+          if [ -f prodogy.json ]; then
+            critical=$(python3 -c "import json; r=json.load(open('prodogy.json')); print(sum(1 for f in r.get('findings',[]) if not f.get('suppressed') and f.get('severity')=='critical'))")
+            error=$(python3 -c "import json; r=json.load(open('prodogy.json')); print(sum(1 for f in r.get('findings',[]) if not f.get('suppressed') and f.get('severity')=='error'))")
+            warning=$(python3 -c "import json; r=json.load(open('prodogy.json')); print(sum(1 for f in r.get('findings',[]) if not f.get('suppressed') and f.get('severity')=='warning'))")
+            info=$(python3 -c "import json; r=json.load(open('prodogy.json')); print(sum(1 for f in r.get('findings',[]) if not f.get('suppressed') and f.get('severity')=='info'))")
+            echo "::notice::Prodogy: $critical critical, $error error, $warning warning, $info info"
+          fi
 
       - name: Upload SARIF to GitHub Code Scanning
         if: always() && hashFiles('prodogy.json') != ''
         run: |
-          pip install sarif-tools 2>/dev/null || true
           prodogy scan . --changed changed.txt --fail-on error --format sarif -o prodogy.sarif || true
         continue-on-error: true
 
@@ -83,15 +92,10 @@ jobs:
 
             const sevEmoji = { critical: '🛑', error: '❌', warning: '⚠️', info: 'ℹ️' };
             const sevOrder = { critical: 4, error: 3, warning: 2, info: 1 };
-
-            const sorted = findings.sort((a, b) =>
-              (sevOrder[b.severity] || 0) - (sevOrder[a.severity] || 0)
-            );
+            const sorted = findings.sort((a, b) => (sevOrder[b.severity] || 0) - (sevOrder[a.severity] || 0));
 
             const bySev = {};
-            for (const f of sorted) {
-              bySev[f.severity] = (bySev[f.severity] || 0) + 1;
-            }
+            for (const f of sorted) bySev[f.severity] = (bySev[f.severity] || 0) + 1;
 
             let body = '## 🚀 Prodogy — Deployment Readiness Report\n\n';
             body += `Scanned **${report.summary.scanned_files}** file(s) — `;
@@ -102,7 +106,7 @@ jobs:
 
             const blocking = sorted.filter(f => sevOrder[f.severity] >= 3);
             if (blocking.length > 0) {
-              body += `> ⚠️ **${blocking.length} finding(s) at or above 'error'** — gate will **FAIL** the build.\n\n`;
+              body += `> ⚠️ **${blocking.length} finding(s) at or above 'error'** — gate **FAILS**.\n\n`;
             } else {
               body += '> ✅ No findings at or above `error` — gate **passes**.\n\n';
             }
@@ -111,10 +115,8 @@ jobs:
             body += '| Severity | Rule | Location | Issue |\n';
             body += '|---|---|---|---|\n';
             for (const f of sorted) {
-              const emoji = sevEmoji[f.severity] || '';
               const loc = f.location.line ? `${f.location.path}:${f.location.line}` : f.location.path;
-              const msg = f.message.replace(/\|/g, '\\|');
-              body += `| ${emoji} ${f.severity} | \`${f.rule_id}\` | \`${loc}\` | ${msg} |\n`;
+              body += `| ${sevEmoji[f.severity] || ''} ${f.severity} | \`${f.rule_id}\` | \`${loc}\` | ${f.message.replace(/\|/g, '\\|')} |\n`;
             }
             body += '\n</details>\n\n';
             body += '<details><summary>Why these matter & how to fix</summary>\n\n';
@@ -151,7 +153,12 @@ jobs:
             }
 
       - name: Gate — fail build on blocking findings
-        if: steps.scan.outcome == 'failure'
+        if: steps.scan.outputs.exit_code != '0'
         run: |
           echo "::error::Prodogy gate FAILED — one or more findings at or above 'error' threshold."
           exit 1
+
+      - name: Gate passed
+        if: steps.scan.outputs.exit_code == '0'
+        run: |
+          echo "::notice::Prodogy gate PASSED — no blocking findings."
