@@ -34,6 +34,7 @@ jobs:
         run: pip install "prodogy[dev,llm] @ https://github.com/${{ github.repository }}/archive/${{ github.sha }}.tar.gz"
 
       - name: Collect changed files (PR mode)
+        if: github.event_name == 'pull_request'
         run: |
           git fetch origin "${{ github.base_ref }}" --depth=1
           git diff --name-only "origin/${{ github.base_ref }}"... > changed.txt
@@ -44,7 +45,9 @@ jobs:
         id: scan
         continue-on-error: true
         run: |
-          prodogy scan . --changed changed.txt --fail-on error --format json -o prodogy.json
+          ARGS=""
+          [ -f changed.txt ] && ARGS="$ARGS --changed changed.txt"
+          prodogy scan . $ARGS --fail-on error --format json -o prodogy.json
           echo "exit_code=$?" >> "$GITHUB_OUTPUT"
 
       - name: Report summary
@@ -60,7 +63,9 @@ jobs:
       - name: Upload SARIF to GitHub Code Scanning
         if: always() && hashFiles('prodogy.json') != ''
         run: |
-          prodogy scan . --changed changed.txt --fail-on error --format sarif -o prodogy.sarif || true
+          ARGS=""
+          [ -f changed.txt ] && ARGS="$ARGS --changed changed.txt"
+          prodogy scan . $ARGS --fail-on error --format sarif -o prodogy.sarif || true
         continue-on-error: true
 
       - name: Upload SARIF
