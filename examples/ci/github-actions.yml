@@ -18,13 +18,17 @@ jobs:
         with:
           fetch-depth: 0
 
-      # One-line Prodogy scan — installs, detects changed files, scans,
-      # optionally posts a PR comment, and gates the build.
+      # Prodogy scan — installs, detects changed files, scans,
+      # optionally enriches with LLM explanations, posts a PR comment, and gates.
       - uses: Stage-Freak/prodogy-v2@main
         with:
           fail-on: error
           post-pr-comment: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          # enrich: true
+          # llm-api-key: ${{ secrets.PRODOGY_LLM_API_KEY }}
+          # llm-provider-url: https://generativelanguage.googleapis.com/v1beta/openai/
+          # llm-model: gemini-2.0-flash
 
       # Optional: upload SARIF for GitHub Code Scanning alerts.
       - name: Upload SARIF
