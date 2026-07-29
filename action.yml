@@ -129,20 +129,14 @@ runs:
       shell: bash
       run: |
         if [ ! -f /tmp/prodogy-report.json ]; then
-          echo "::notice::No scan report — gate skipped."
+          echo "::notice::No scan report - gate skipped."
           exit 0
         fi
-        BLOCKING=$(python3 -c "
-import json
-r = json.load(open('/tmp/prodogy-report.json'))
-order = {'critical':4,'error':3,'warning':2,'info':1}
-threshold = order.get('${{ inputs.fail-on }}', 3)
-count = sum(1 for f in r.get('findings',[]) if not f.get('suppressed') and order.get(f.get('severity'),0) >= threshold)
-print(count)
-")
+        SCRIPT="import json, sys; r=json.load(open('/tmp/prodogy-report.json')); o={'critical':4,'error':3,'warning':2,'info':1}; t=o.get('${{ inputs.fail-on }}',3); print(sum(1 for f in r.get('findings',[]) if not f.get('suppressed') and o.get(f.get('severity'),0) >= t))"
+        BLOCKING=$(python3 -c "$SCRIPT")
         if [ "$BLOCKING" -gt 0 ]; then
-          echo "::error::Prodogy gate FAILED — $BLOCKING finding(s) at or above '${{ inputs.fail-on }}' threshold."
+          echo "::error::Prodogy gate FAILED - $BLOCKING finding(s) at or above '${{ inputs.fail-on }}' threshold."
           exit 1
         else
-          echo "::notice::Prodogy gate PASSED — no blocking findings."
+          echo "::notice::Prodogy gate PASSED - no blocking findings."
         fi
