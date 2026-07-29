@@ -51,7 +51,7 @@ class Scanner:
         with_maintainability: bool = False,
         config_path: str | Path | None = None,
     ) -> Report:
-        root = Path(root)
+        root = Path(root).resolve()
         cfg = self._explicit_config or resolve_config(
             root if root.is_dir() else root.parent,
             Path(config_path) if config_path else None,
