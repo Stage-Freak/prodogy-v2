@@ -59,6 +59,24 @@ and fails the build on blocking findings:
 | `version` | — | Pin a specific Prodogy version (e.g. `v0.2.0`) |
 | `post-pr-comment` | `false` | Post a findings summary as a PR comment |
 | `github-token` | — | GitHub token for posting PR comments |
+| `enrich` | `false` | Enrich findings with LLM-generated contextual explanations |
+| `llm-api-key` | — | API key for the LLM provider (set as a GitHub secret) |
+| `llm-provider-url` | — | LLM provider base URL (default: `https://api.openai.com/v1`) |
+| `llm-model` | — | LLM model name (default: `gpt-4o-mini`)
+
+**With LLM enrichment enabled:**
+
+```yaml
+- uses: Stage-Freak/prodogy-v2@main
+  with:
+    fail-on: error
+    post-pr-comment: true
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    enrich: true
+    llm-api-key: ${{ secrets.PRODOGY_LLM_API_KEY }}
+    llm-provider-url: https://generativelanguage.googleapis.com/v1beta/openai/
+    llm-model: gemini-2.0-flash
+```
 
 For SARIF upload (GitHub Code Scanning), add one more step after the action:
 
