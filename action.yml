@@ -72,7 +72,12 @@ runs:
       run: |
         if [ "${{ github.event_name }}" = "pull_request" ]; then
           git fetch origin "${{ github.base_ref }}" --depth=1 2>/dev/null || true
-          git diff --name-only "origin/${{ github.base_ref }}"... > /tmp/prodogy-changed.txt
+          git diff --name-only "origin/${{ github.base_ref }}"... > /tmp/prodogy-changed-raw.txt
+          # Prefix with GITHUB_WORKSPACE so --changed gets absolute paths
+          rm -f /tmp/prodogy-changed.txt
+          while IFS= read -r f; do
+            echo "$GITHUB_WORKSPACE/$f" >> /tmp/prodogy-changed.txt
+          done < /tmp/prodogy-changed-raw.txt
           echo "Changed files:"
           cat /tmp/prodogy-changed.txt
         fi
