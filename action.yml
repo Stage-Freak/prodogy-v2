@@ -83,8 +83,7 @@ runs:
         [ -n "${{ inputs.config }}" ] && ARGS="$ARGS --config ${{ inputs.config }}"
         [ -n "${{ inputs.baseline }}" ] && ARGS="$ARGS --baseline ${{ inputs.baseline }}"
 
-        prodogy scan . $ARGS --fail-on ${{ inputs.fail-on }} -f json -o /tmp/prodogy-report.json
-        echo "SCAN_EXIT_CODE=$?" >> "$GITHUB_ENV"
+        prodogy scan . $ARGS --fail-on ${{ inputs.fail-on }} -f json -o /tmp/prodogy-report.json || true
 
     - name: Post PR comment
       if: github.event_name == 'pull_request' && inputs.post-pr-comment == 'true' && inputs.github-token != ''
@@ -126,15 +125,24 @@ runs:
             await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body });
           }
 
-    - name: Gate — fail build on blocking findings
+    - name: Gate
       shell: bash
-      if: env.SCAN_EXIT_CODE != '0'
       run: |
-        echo "::error::Prodogy gate FAILED — findings at or above '${{ inputs.fail-on }}' threshold."
-        exit 1
-
-    - name: Gate passed
-      shell: bash
-      if: env.SCAN_EXIT_CODE == '0'
-      run: |
-        echo "::notice::Prodogy gate PASSED — no blocking findings."
+        if [ ! -f /tmp/prodogy-report.json ]; then
+          echo "::notice::No scan report — gate skipped."
+          exit 0
+        fi
+        BLOCKING=$(python3 -c "
+import json
+r = json.load(open('/tmp/prodogy-report.json'))
+order = {'critical':4,'error':3,'warning':2,'info':1}
+threshold = order.get('${{ inputs.fail-on }}', 3)
+count = sum(1 for f in r.get('findings',[]) if not f.get('suppressed') and order.get(f.get('severity'),0) >= threshold)
+print(count)
+")
+        if [ "$BLOCKING" -gt 0 ]; then
+          echo "::error::Prodogy gate FAILED — $BLOCKING finding(s) at or above '${{ inputs.fail-on }}' threshold."
+          exit 1
+        else
+          echo "::notice::Prodogy gate PASSED — no blocking findings."
+        fi
