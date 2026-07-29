@@ -52,13 +52,17 @@ runs:
 
     - name: Install Prodogy
       shell: bash
+      env:
+        ACTION_REPO: ${{ github.action_repository }}
+        ACTION_REF: ${{ github.action_ref }}
       run: |
         if [ -n "${{ inputs.version }}" ]; then
-          pip install "prodogy[dev,llm]==${{ inputs.version }}" 2>/dev/null || \
-          pip install "prodogy[dev,llm] @ https://github.com/${{ github.repository }}/releases/download/${{ inputs.version }}/prodogy-${inputs.version#v}-py3-none-any.whl" 2>/dev/null || \
-          pip install "prodogy[dev,llm] @ https://github.com/${{ github.repository }}/archive/refs/tags/${{ inputs.version }}.tar.gz"
+          V="${{ inputs.version }}"
+          pip install "prodogy[dev,llm]==${V#v}" 2>/dev/null || \
+          pip install "prodogy[dev,llm] @ https://github.com/${ACTION_REPO}/releases/download/${V}/prodogy-${V#v}-py3-none-any.whl" 2>/dev/null || \
+          pip install "prodogy[dev,llm] @ https://github.com/${ACTION_REPO}/archive/refs/tags/${V}.tar.gz"
         else
-          pip install prodogy[dev,llm]
+          pip install "prodogy[dev,llm] @ https://github.com/${ACTION_REPO}/archive/refs/heads/${ACTION_REF}.tar.gz"
         fi
         echo "Prodogy $(prodogy --version) installed"
 
