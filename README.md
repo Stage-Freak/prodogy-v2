@@ -36,22 +36,44 @@ pip install -e ".[dev,web]"
 
 ### GitHub Action (recommended)
 
-Add one step to any workflow — no copy-paste needed:
+Add one step to any workflow — no copy-paste needed. The action installs Prodogy,
+collects changed files in PR mode, runs the scan, optionally posts a PR comment,
+and fails the build on blocking findings:
 
 ```yaml
-- uses: your-org/prodogy@v0.2.0
+- uses: Stage-Freak/prodogy-v2@main
   with:
-    fail-on: error           # gate threshold
-    changed: changed.txt     # only scan PR-changed files
-    config: .prodogy.yml     # optional config file
-    version: v0.2.0          # pin a version (default: latest from PyPI)
+    fail-on: error              # gate threshold
+    post-pr-comment: true       # auto-post a PR comment with findings
+    github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-The action installs Prodogy with all extras, collects changed files in PR mode,
-runs the scan, and exits non-zero when findings exceed the `--fail-on` threshold.
+**Inputs:**
 
-For a full demo including SARIF upload and PR comments, see
-[`examples/ci/github-actions.yml`](examples/ci/github-actions.yml).
+| Input | Default | Description |
+|---|---|---|
+| `fail-on` | `error` | Minimum severity that fails the build (`critical`, `error`, `warning`, `info`) |
+| `changed` | — | File listing changed paths (one per line) — override auto-detection |
+| `config` | — | Path to a `.prodogy.yml` config file |
+| `baseline` | — | Baseline file to suppress pre-existing findings |
+| `version` | — | Pin a specific Prodogy version (e.g. `v0.2.0`) |
+| `post-pr-comment` | `false` | Post a findings summary as a PR comment |
+| `github-token` | — | GitHub token for posting PR comments |
+
+For SARIF upload (GitHub Code Scanning), add one more step after the action:
+
+```yaml
+- uses: Stage-Freak/prodogy-v2@main
+
+- name: Upload SARIF
+  if: always()
+  uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: /tmp/prodogy-report.json
+  continue-on-error: true
+```
+
+See [`examples/ci/github-actions.yml`](examples/ci/github-actions.yml) for a complete example.
 
 ### CLI
 
