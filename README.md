@@ -74,8 +74,8 @@ and fails the build on blocking findings:
     github-token: ${{ secrets.GITHUB_TOKEN }}
     enrich: true
     llm-api-key: ${{ secrets.PRODOGY_LLM_API_KEY }}
-    llm-provider-url: https://generativelanguage.googleapis.com/v1beta/openai/
-    llm-model: gemini-2.0-flash
+    llm-provider-url: https://openrouter.ai/api/v1
+    llm-model: openrouter/free
 ```
 
 For SARIF upload (GitHub Code Scanning), add one more step after the action:
